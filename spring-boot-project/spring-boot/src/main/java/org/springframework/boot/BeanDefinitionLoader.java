@@ -79,7 +79,9 @@ class BeanDefinitionLoader {
 		Assert.notNull(registry, "Registry must not be null");
 		Assert.notEmpty(sources, "Sources must not be empty");
 		this.sources = sources;
+		// 注解形式的Bean定义读取器，来读取 @Configuration @Bean @Component @Controller 等
 		this.annotatedReader = new AnnotatedBeanDefinitionReader(registry);
+		// xml形式的Bean定义读取器
 		this.xmlReader = new XmlBeanDefinitionReader(registry);
 		if (isGroovyPresent()) {
 			this.groovyReader = new GroovyBeanDefinitionReader(registry);
@@ -153,6 +155,7 @@ class BeanDefinitionLoader {
 			GroovyBeanDefinitionSource loader = BeanUtils.instantiateClass(source, GroovyBeanDefinitionSource.class);
 			load(loader);
 		}
+		// source类上是否标注了@Componnet注解
 		if (isComponent(source)) {
 			this.annotatedReader.register(source);
 			return 1;

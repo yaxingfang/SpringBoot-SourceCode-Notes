@@ -176,7 +176,7 @@ Spring中有很多以@Enable开头的注解，其作用就是借助@Import来收
 
 	将AutoConfigurationImportSelector这个类导入到Spring容器中，AutoConfigurationImportSelector可以帮助SpringBoot应用将所有符合条件的@Configuration配置都加载到当前SpringBoot创建并使用的IOC容器中
 
-	<img src="https://yaxingfang-typora.oss-cn-hangzhou.aliyuncs.com/image-20220909204224504.png" alt="image-20220909204224504" style="zoom:50%;" />
+	<img src="https://yaxingfang-typora.oss-cn-hangzhou.aliyuncs.com/image-20220909204224504.png" alt="image-20220909204224504"  />
 
 	AutoConfigurationImportSelector重点实现了DeferredImportSelector接口其继承ImportSelector接口，还有各种Aware接口，分别表示在某个时机会被回调
 
@@ -449,7 +449,73 @@ protected ConfigurableApplicationContext createApplicationContext() {
 
 #### 4. 刷新应用上下文前的准备阶段
 
+1. 完成应用上下文context相关属性设置
+2. 完成相关bean对象比如主启动类的BeanDefinition放到beanDefinitionMap中
 
+```java
+prepareContext(context, environment, listeners, applicationArguments, printedBanner);
+
+private void prepareContext(ConfigurableApplicationContext context, ConfigurableEnvironment environment,
+                            SpringApplicationRunListeners listeners, ApplicationArguments applicationArguments, Banner printedBanner) {
+  // 设置容器环境
+  context.setEnvironment(environment);
+  // 执行容器后置处理
+  postProcessApplicationContext(context);
+  applyInitializers(context);
+  // 向各个监听器发送已经准备好的事件
+  listeners.contextPrepared(context);
+  if (this.logStartupInfo) {
+    logStartupInfo(context.getParent() == null);
+    logStartupProfileInfo(context);
+  }
+  // Add boot specific singleton beans
+  ConfigurableListableBeanFactory beanFactory = context.getBeanFactory();
+  // 将main函数中的args参数封装为单例Bean注册到容器中
+  beanFactory.registerSingleton("springApplicationArguments", applicationArguments);
+  if (printedBanner != null) {
+    // 将printedBanner封装为单例Bean注册到容器中
+    beanFactory.registerSingleton("springBootBanner", printedBanner);
+  }
+  if (beanFactory instanceof DefaultListableBeanFactory) {
+    ((DefaultListableBeanFactory) beanFactory)
+    .setAllowBeanDefinitionOverriding(this.allowBeanDefinitionOverriding);
+  }
+  if (this.lazyInitialization) {
+    context.addBeanFactoryPostProcessor(new LazyInitializationBeanFactoryPostProcessor());
+  }
+  // Load the sources
+  Set<Object> sources = getAllSources();
+  Assert.notEmpty(sources, "Sources must not be empty");
+  // 将主启动类Bean注册到容器中
+  load(context, sources.toArray(new Object[0]));
+  // 发布容器已加载事件
+  listeners.contextLoaded(context);
+}
+```
+
+Spring容器在启动过程中，会将类解析成Spring内部的BeanDefinition结构，并将BeanDefinition存储到DefaultListableBeanFactory的map中
+
+```java
+// org.springframework.boot.BeanDefinitionLoader#load(java.lang.Class<?>)
+// source类上是否标注了@Componnet注解
+if (isComponent(source)) {
+  this.annotatedReader.register(source);
+  return 1;
+}
+
+// org.springframework.context.annotation.AnnotatedBeanDefinitionReader#doRegisterBean
+AnnotatedGenericBeanDefinition abd = new AnnotatedGenericBeanDefinition(beanClass);
+BeanDefinitionHolder definitionHolder = new BeanDefinitionHolder(abd, beanName);
+definitionHolder = AnnotationConfigUtils.applyScopedProxyMode(scopeMetadata, definitionHolder, this.registry);
+BeanDefinitionReaderUtils.registerBeanDefinition(definitionHolder, this.registry);
+this.beanDefinitionMap.put(beanName, beanDefinition);
+
+// org.springframework.beans.factory.support.DefaultListableBeanFactory#registerBeanDefinition
+this.beanDefinitionMap.put(beanName, beanDefinition);
+this.beanDefinitionNames.add(beanName);
+```
+
+![image-20220910161955134](https://yaxingfang-typora.oss-cn-hangzhou.aliyuncs.com/image-20220910161955134.png)
 
 #### 5. 刷新应用上下文（IOC容器初始化过程）
 
@@ -459,7 +525,15 @@ protected ConfigurableApplicationContext createApplicationContext() {
 
 
 
+## 自定义starter
 
+
+
+## 内嵌Tomcat
+
+
+
+## 自动配置SpringMVC
 
 
 

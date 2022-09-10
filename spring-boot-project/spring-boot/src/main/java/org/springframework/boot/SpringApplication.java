@@ -380,18 +380,24 @@ public class SpringApplication {
 
 	private void prepareContext(ConfigurableApplicationContext context, ConfigurableEnvironment environment,
 			SpringApplicationRunListeners listeners, ApplicationArguments applicationArguments, Banner printedBanner) {
+		// 设置容器环境
 		context.setEnvironment(environment);
+		// 执行容器后置处理 （设置一些属性）
 		postProcessApplicationContext(context);
 		applyInitializers(context);
+		// 向各个监听器发送已经准备好的事件
 		listeners.contextPrepared(context);
 		if (this.logStartupInfo) {
 			logStartupInfo(context.getParent() == null);
 			logStartupProfileInfo(context);
 		}
 		// Add boot specific singleton beans
+		// org.springframework.beans.factory.support.DefaultListableBeanFactory
 		ConfigurableListableBeanFactory beanFactory = context.getBeanFactory();
+		// 将main函数中的args参数封装为单例Bean注册到容器中
 		beanFactory.registerSingleton("springApplicationArguments", applicationArguments);
 		if (printedBanner != null) {
+			// 将printedBanner封装为单例Bean注册到容器中
 			beanFactory.registerSingleton("springBootBanner", printedBanner);
 		}
 		if (beanFactory instanceof DefaultListableBeanFactory) {
@@ -404,7 +410,9 @@ public class SpringApplication {
 		// Load the sources
 		Set<Object> sources = getAllSources();
 		Assert.notEmpty(sources, "Sources must not be empty");
+		// 将主启动类Bean注册到容器中
 		load(context, sources.toArray(new Object[0]));
+		// 发布容器已加载事件
 		listeners.contextLoaded(context);
 	}
 
