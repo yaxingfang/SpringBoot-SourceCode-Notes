@@ -368,6 +368,16 @@ public SpringApplication(ResourceLoader resourceLoader, Class<?>... primarySourc
 
 ### 执行run方法
 
+总结：
+
+1. 构建应用上下文，同时IoC容器也创建了
+
+2. 执行prepareContext方法时，将主启动类生成实例对象存入容器中
+
+3. 执行refreshContext方法，主要是Spring源码，通过解析主启动类上的@SpringBootApplication注解
+
+	@ComponnetScan和@Import注解完成Bean对象的创建，并且也会加载META-INF/spring.factories自动配置类工厂全路径，进行过滤，将真正需要生成实例对象生成并存到容器中
+
 #### 1. 获取并启动监听器
 
 负责在SpringBoot启动的不同阶段广播出不同消息，传递给ApplicationListener监听器实现类
@@ -519,31 +529,314 @@ this.beanDefinitionNames.add(beanName);
 
 #### 5. 刷新应用上下文（IOC容器初始化过程）
 
+```java
+public void refresh() throws BeansException, IllegalStateException {
+    synchronized(this.startupShutdownMonitor) {
+      	// 准备工作 完成一些赋值操作
+        this.prepareRefresh();
+      	// 拿到创建的beanFactory
+        ConfigurableListableBeanFactory beanFactory = this.obtainFreshBeanFactory
+        // beanFactory的一些属性设置
+        this.prepareBeanFactory(beanFactory);
 
+        try {
+          	// bean的后置处理
+            this.postProcessBeanFactory(beanFactory);
+            this.invokeBeanFactoryPostProcessors(beanFactory);
+            this.registerBeanPostProcessors(beanFactory);
+            this.initMessageSource();
+            this.initApplicationEventMulticaster();
+            this.onRefresh();
+            this.registerListeners();
+            this.finishBeanFactoryInitialization(beanFactory);
+            this.finishRefresh();
+        } catch (BeansException var9) {
+            if (this.logger.isWarnEnabled()) {
+                this.logger.warn("Exception encountered during context initialization - cancelling refresh attempt: " + var9);
+            }
+
+            this.destroyBeans();
+            this.cancelRefresh(var9);
+            throw var9;
+        } finally {
+            this.resetCommonCaches();
+        }
+
+    }
+}
+
+protected void invokeBeanFactoryPostProcessors(ConfigurableListableBeanFactory beanFactory) {
+  	PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(beanFactory, this.getBeanFactoryPostProcessors());
+  	if (beanFactory.getTempClassLoader() == null && beanFactory.containsBean("loadTimeWeaver")) {
+      	beanFactory.addBeanPostProcessor(new LoadTimeWeaverAwareProcessor(beanFactory));
+      	beanFactory.setTempClassLoader(new ContextTypeMatchClassLoader(beanFactory.getBeanClassLoader()));
+    }
+}
+```
+
+**invokeBeanFactoryPostProcessors：**
+
+IoC容器的初始化过程包括三个步骤，在invokeBeanFactoryPostProcessors()方法中完成了IoC容器初始化过程的三个步骤
+
+**1、Resource定位**
+
+在SpringBoot中，包扫描都是从主类所在的包开始扫描，prepareContext方法中，将主类解析成BeanDefinition，然后在refresh方法中的invokeBeanFactoryPostProcessors方法中解析主类的BeanDefinition获取basePackages路径。
+
+其次，各种starter是通过SPI扩展机制实现的自动装配，SpringBoot的自动装配同样也是在invokeBeanFactoryPostProcessors方法中实现的。
+
+在invokeBeanFactoryPostProcessors方法中也实现了对于@EnableXXX注解所使用的@Import注解的定位加载。
+
+常规的在SpringBoot中有三种实现定位：
+
+第一种是主类所在的包；
+
+第二种是SPI扩展机制实现的自动装配（比如各种starter）；
+
+第三种是@Import注解指定的类。
+
+**2、BeanDefinition的载入**
+
+对于以上三种Resource的定位，然后就要分别载入BeanDefinition。
+
+对于上面定位得到的basePackages，SpringBoot会将该路径拼接为：classpath:com/yaxing/\*\*/*.class这样的形式，然后PathMachineresourcePatternResolver类将该路径下所有.class文件都加载进来，然后判断是不是有@Component注解，如果有就是需要装载的BeanDefinition。
+
+**3、注册BeanDefinition**
+
+将BeanDefinition注入到ConcurrentHashMap中。
+
+##### @Component
+
+1. 得到prepare阶段得到的6个自动配置类以及标注了Component注解的1个主启动类
+
+![image-20220912100433193](https://yaxingfang-typora.oss-cn-hangzhou.aliyuncs.com/image-20220912100433193.png)
+
+2. 之后对于这些beanDefinition判断其是否标注了@Component注解是的话存到List\<BeanDefinitionHolder\> configCandidates中，判断完只有一个主启动类标注了@Component注解
+
+![image-20220912100637347](https://yaxingfang-typora.oss-cn-hangzhou.aliyuncs.com/image-20220912100637347.png)
+
+3. 进行解析
+
+![image-20220912101000732](https://yaxingfang-typora.oss-cn-hangzhou.aliyuncs.com/image-20220912101000732.png)
+
+4. 由于主启动类没有标注扫描basePackages，会添加basePackages为其所在的包路径
+
+5. 注册controller
+
+![image-20220912101747810](https://yaxingfang-typora.oss-cn-hangzhou.aliyuncs.com/image-20220912101747810.png)
+
+##### @Import + 自动配置类
+
+![image-20220912110958315](https://yaxingfang-typora.oss-cn-hangzhou.aliyuncs.com/image-20220912110958315.png)
+
+org.springframework.context.annotation.ConfigurationClassBeanDefinitionReader#loadBeanDefinitions
+
+![image-20220912111018012](https://yaxingfang-typora.oss-cn-hangzhou.aliyuncs.com/image-20220912111018012.png)
 
 #### 6. 刷新应用上下文后的扩展接口
 
+```java
+/**
+ * Called after the context has been refreshed.
+ * @param context the application context
+ * @param args the application arguments
+ */
+protected void afterRefresh(ConfigurableApplicationContext context, ApplicationArguments args) {
+}
+```
 
+默认是一个空实现方法，如果有启动上下文之后的自定义需求就可以重写这个方法来实现
 
 ## 自定义starter
 
+> 将独立于业务之外的通用配置模块封装成starter，复用时在pom中导入依赖，SpringBoot自动装配，就可以方便的进行复用。
+
+### 命名规则
+
+自定义的starter使用 `xxx-spring-boot-starter` 命名规则
+
+### 自定义starter实现
+
+> 1、自定义starter 2、使用starter
+
+#### 自定义starter
+
+1、新建maven jar工程，命名为 fyx-spring-boot-starter，导入依赖
+
+```xml
+<dependencies>
+  <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-autoconfigure</artifactId>
+    <version>2.2.9.RELEASE</version>
+  </dependency>
+</dependencies>
+```
+
+2、定义通用配置类CommonBean
+
+```java
+/**
+ * @author fangyaxing
+ * @date 2022/9/12
+ */
+@EnableConfigurationProperties
+@ConfigurationProperties(prefix = "commonbean")
+public class CommonBean {
+
+   /**
+    * 姓名
+    */
+   private String name;
+
+   /**
+    * 年龄
+    */
+   private int age;
+
+   public String getName() {
+      return name;
+   }
+
+   public void setName(String name) {
+      this.name = name;
+   }
+
+   public int getAge() {
+      return age;
+   }
+
+   public void setAge(int age) {
+      this.age = age;
+   }
+
+   @Override
+   public String toString() {
+      return "CommonBean{" +
+            "name='" + name + '\'' +
+            ", age=" + age +
+            '}';
+   }
+}
+```
+
+3、定义配置类的工厂类CommonBeanAutoConfiguration，其中通过@Bean定义通用配置类
+
+```java
+/**
+ * @author fangyaxing
+ * @date 2022/9/12
+ */
+@Configuration
+public class CommonBeanAutoConfiguration {
 
 
-## 内嵌Tomcat
+   static {
+      System.out.println("CommonBeanAutoConfiguration init...");
+   }
+
+   @Bean
+   public CommonBean commonBean() {
+      return new CommonBean();
+   }
+}
+```
+
+4、resources下创建/META-INF/spring.factories，配置自己定义的自动配置类
+
+```xml
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+  com.yaxing.config.CommonBeanAutoConfiguration
+```
+
+#### 使用starter
+
+1、导入依赖
+
+```xml
+<dependency>
+   <groupId>com.yaxing</groupId>
+   <artifactId>fyx-spring-boot-starter</artifactId>
+   <version>1.0-SNAPSHOT</version>
+</dependency>
+```
+
+2、配置属性
+
+```properties
+commonbean.name="arthur"
+commonbean.age=18
+```
+
+3、测试打印
+
+```java
+@SpringBootTest
+@RunWith(SpringRunner.class)
+class SpringBootMytestApplicationTests {
+
+   @Autowired
+   private CommonBean commonBean;
+
+   @Test
+   void contextLoads() {
+      System.out.println(commonBean);
+   }
+
+}
+```
+
+#### 热插拔改造
+
+1、新增标记类ConfigMarker
+
+```java
+public class ConfigMarker {
+}
+```
+
+2、新增@EnableRegisterServer注解包含@Import({ConfigMarker.class})
+
+```java
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Import({ConfigMarker.class})
+public @interface EnableRegisterServer {
+
+}
+```
+
+3、CommonBeanAutoConfiguration类添加条件注解只有当上下文中包含标记类的时候才生效
+
+```java
+@Configuration
+@ConditionalOnBean(ConfigMarker.class)
+public class CommonBeanAutoConfiguration {
 
 
+   static {
+      System.out.println("CommonBeanAutoConfiguration init...");
+   }
 
-## 自动配置SpringMVC
+   @Bean
+   public CommonBean commonBean() {
+      return new CommonBean();
+   }
+}
+```
 
+4、如果要自动加载CommonBeanAutoConfiguration类，就需要增加@EnableRegisterServer注解
 
+```java
+@SpringBootApplication
+@EnableRegisterServer
+public class SpringBootMytestApplication {
 
+	public static void main(String[] args) {
+		SpringApplication.run(SpringBootMytestApplication.class, args);
+	}
 
-
-
-
-
-
-
+}
+```
 
 
 

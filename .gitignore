@@ -43,4 +43,6 @@ secrets.yml
 .mvn/
 .bomr/
 .github
+.git/
+.idea/
 
