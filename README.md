@@ -13,7 +13,7 @@
 3. 编译源码
 
 	1. 进入源码根目录
-	2. 执行 `mvn clean install -DskipTests -Pfast` 跳过测试用例，会下载大量jar包，时间较长，出现Build Success表明构建成功
+	2. 执行 `mvn clean install -DskipTests ` 跳过测试用例，会下载大量jar包，时间较长，出现Build Success表明构建成功
 		<img src="https://yaxingfang-typora.oss-cn-hangzhou.aliyuncs.com/image-20220909174146933.png" alt="image-20220909174146933" style="zoom:50%;" />
 
 4. IDEA导入项目
